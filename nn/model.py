@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Sequential:
     def __init__(self,layers):
@@ -49,6 +50,7 @@ class Sequential:
     def fit(self, X, Y, loss_fn, optimizer, epochs=1000, batch_size=32):
 
       m = X.shape[0]
+      losses=[]
 
       for epoch in range(epochs):
 
@@ -75,4 +77,12 @@ class Sequential:
 
         if epoch % 200 == 0:
             print(f"Epoch {epoch}, Loss: {epoch_loss}")
+        
+        losses.append(epoch_loss)
+      
+    
+      plt.plot(losses)
+      plt.title("Training Loss")
+      plt.savefig("assets/loss.png")
+      
     
