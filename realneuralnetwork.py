@@ -53,7 +53,32 @@ class sequential:
                 params.append(layer)
         return params
     
+    def train(self):
+      for layer in self.layers:
+         if hasattr(layer, "training"):
+            layer.training = True
+
+    def eval(self):
+      for layer in self.layers:
+         if hasattr(layer, "training"):
+            layer.training = False
+
+    def save(self, path):
+        params = []
+        for layer in self.layers:
+           if hasattr(layer, "W"):
+              params.append((layer.W, layer.b))
+              np.save(path, params, allow_pickle=True)
     
+    def load(self, path):
+       params = np.load(path, allow_pickle=True)
+       idx = 0
+       for layer in self.layers:
+          if hasattr(layer, "W"):
+            layer.W, layer.b = params[idx]
+            idx += 1
+    
+
     def fit(self, X, Y, loss_fn, optimizer, epochs=1000, batch_size=32):
 
       m = X.shape[0]
@@ -98,6 +123,21 @@ class BCELoss:
     def backward(self):
       return  -(self.Y_true / (self.Y_pred + 1e-8)) + \
           (1 - self.Y_true) / (1 - self.Y_pred + 1e-8)
+    
+class Dropout:
+    def __init__(self, p=0.5):
+        self.p = p
+        self.training = True
+
+    def forward(self, X):
+        if self.training:
+            self.mask = (np.random.rand(*X.shape) > self.p) / (1 - self.p)
+            return X * self.mask
+        else:
+            return X
+
+    def backward(self, dA):
+        return dA * self.mask
 
 
 class SGD:
@@ -110,6 +150,57 @@ class SGD:
             layer.W -= self.lrate * layer.dW
             layer.b -= self.lrate * layer.db
 
+class Adam:
+    def __init__(self, layers, lr=0.001, beta1=0.9, beta2=0.999, eps=1e-8):
+        self.layers = layers
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+        self.t = 0
+
+        self.m = {}
+        self.v = {}
+
+        for idx, layer in enumerate(layers):
+            self.m[idx] = {
+                "W": np.zeros_like(layer.W),
+                "b": np.zeros_like(layer.b)
+            }
+            self.v[idx] = {
+                "W": np.zeros_like(layer.W),
+                "b": np.zeros_like(layer.b)
+            }
+
+    def step(self):
+        self.t += 1
+
+        for idx, layer in enumerate(self.layers):
+
+            for param_name in ["W", "b"]:
+
+                grad = getattr(layer, "d" + param_name)
+
+                self.m[idx][param_name] = (
+                    self.beta1 * self.m[idx][param_name]
+                    + (1 - self.beta1) * grad
+                )
+
+                self.v[idx][param_name] = (
+                    self.beta2 * self.v[idx][param_name]
+                    + (1 - self.beta2) * (grad ** 2)
+                )
+
+                m_hat = self.m[idx][param_name] / (1 - self.beta1 ** self.t)
+                v_hat = self.v[idx][param_name] / (1 - self.beta2 ** self.t)
+
+                update = self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+                setattr(layer, param_name,
+                        getattr(layer, param_name) - update)
+                
+
+                
 
 X = np.array([[0,0],
               [0,1],
@@ -124,16 +215,19 @@ Y = np.array([[0],
 model = sequential([
     Linear(2, 16),
     ReLU(),
+    Dropout(0.2),
     Linear(16, 1),
     Sigmoid()
 ])
 
 loss_fn = BCELoss()
-optimizer = SGD(model.parameters(), lr=0.1)
+optimizer = Adam(model.parameters(), lr=0.01)
+model.train()
 model.fit(X, Y, loss_fn, optimizer,
           epochs=1000,
           batch_size=2)
 
+model.eval()
 
 predictions = (model.forward(X) > 0.5).astype(int)
 
