@@ -16,3 +16,13 @@ class Sigmoid:
 
     def backward(self, dA):
         return dA * self.A * (1 - self.A)
+
+
+class Softmax:
+    def forward(self, X):
+        exp = np.exp(X - np.max(X, axis=1, keepdims=True))
+        self.A = exp / np.sum(exp, axis=1, keepdims=True)
+        return self.A
+
+    def backward(self, dA):
+        return dA
